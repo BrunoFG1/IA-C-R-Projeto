@@ -6,6 +6,7 @@ import timm
 from torch import nn
 from torchvision.transforms import transforms 
 from PIL import Image
+import tqdm
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -68,20 +69,20 @@ transform = transforms.Compose([
 train_dataset = FairFaceDataset(train_csv, PATH, transform=transform)
 val_dataset = FairFaceDataset(val_csv, PATH, transform=transform)
 
-train_Dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True)
-val_Dataloader = DataLoader(val_dataset, batch_size=16, shuffle=False)
+train_Dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True, pin_memory=True, num_workers=4)
+val_Dataloader = DataLoader(val_dataset, batch_size=16, shuffle=False, pin_memory=True, num_workers=4)
 
 model = timm.create_model("resnet50", pretrained=True, num_classes=2)
 loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001)
 
 model.to(device)
-epochs = 20
+epochs = 1
 
 for epoch in range(epochs):
     model.train()
     actual_loss = 0.0
-    for image, labels, _, _ in train_Dataloader:
+    for image, labels, _, _ in tqdm.tqdm(train_Dataloader, desc=f"Época {epoch+1}/{epochs}"):
         image, labels = image.to(device), labels.to(device)
         optimizer.zero_grad()
         outputs = model(image)
