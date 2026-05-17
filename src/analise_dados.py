@@ -2,6 +2,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
+
+from fairness_metrics import demographic_parity, equal_opportunity, calibration_by_group
+
 path = "fairface/FairFace/"
 train_csv = path + "train_labels.csv"
 
