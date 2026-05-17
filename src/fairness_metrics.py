@@ -65,7 +65,7 @@ def equal_oppurtunity(y_true, y_pred, A):
     eod_tpr = tpr_rates[0] - tpr_rates[1]
     eod_fpr = fpr_rates[0] - fpr_rates[1]
     
-    return tpr_rates, eod_fpr, eod_tpr
+    return tpr_rates, fpr_rates, eod_fpr, eod_tpr
 
 
 # calibração - suficiência
