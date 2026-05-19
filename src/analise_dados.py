@@ -47,4 +47,24 @@ A = [0 if r == "Black" else 1 for r in all_races]
 
 spd, di = demographic_parity(all_preds, A)
 tpr_rates, fpr_rates, eod_tpr, eod_fpr = equal_opportunity(all_labels, all_preds, A)
+print(f"Statistical Parity Difference: {spd:.4f}")
+print(f"Disparate Impact: {di:.4f}")
+print(f"Equal Opportunity Difference (TPR): {eod_tpr:.4f}")
 
+# calc calibration
+freq_g0, freq_g1 = calibration_by_group(all_labels, all_scores, A)
+
+bins = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
+mid_bins = [0.1, 0.3, 0.5, 0.7, 0.9]
+
+plt.figure(figsize=(8, 6))
+plt.plot(mid_bins, freq_g0, 'o-', label='Black (Group 0)')
+plt.plot(mid_bins, freq_g1, 's-', label='White (Group 1)')
+plt.plot([0, 1], [0, 1], '--', color='gray', label='Ideal')
+plt.xlabel('Predicted Probability (Score)')
+plt.ylabel('Fraction of Positives')
+plt.title('Calibration Curve by Race')
+plt.legend()
+plt.grid(True)
+plt.savefig('resultado_calibracao.png')
+print("Gráfico guardado em resultado_calibracao.png")

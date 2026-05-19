@@ -3,7 +3,7 @@ import numpy as np
 
 
 # paridade demográfica - independência
-def demograpchic_parity(y_pred, A):
+def demographic_parity(y_pred, A):
     total_0 = 0
     total_1 = 0
 
@@ -30,7 +30,7 @@ def demograpchic_parity(y_pred, A):
     return spd, di
 
 # igualdade de opurtunidades - separação
-def equal_oppurtunity(y_true, y_pred, A):
+def equal_opportunity(y_true, y_pred, A):
     groups = [0, 1]
     tpr_rates = {}
     fpr_rates = {}
@@ -48,24 +48,24 @@ def equal_oppurtunity(y_true, y_pred, A):
                         tn += 1
                     else:
                         fn += 1
-    if (tp + fn) > 0:
-        tpr = tp / (tp + fn)
-    else:
-        tpr = 0
+        if (tp + fn) > 0:
+            tpr = tp / (tp + fn)
+        else:
+            tpr = 0
 
-    if (fp + tn) > 0:
-        fpr = fp / (fp + tn)
-    else:
-        fpr = 0
+        if (fp + tn) > 0:
+            fpr = fp / (fp + tn)
+        else:
+            fpr = 0
 
-    tpr_rates[group] = tpr
-    fpr_rates[group] = fpr
+        tpr_rates[group] = tpr
+        fpr_rates[group] = fpr
     
     # equal oppurtunity difference
     eod_tpr = tpr_rates[0] - tpr_rates[1]
     eod_fpr = fpr_rates[0] - fpr_rates[1]
     
-    return tpr_rates, fpr_rates, eod_fpr, eod_tpr
+    return tpr_rates, fpr_rates, eod_tpr, eod_fpr
 
 
 # calibração - suficiência
