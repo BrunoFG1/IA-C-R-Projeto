@@ -1,71 +1,50 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-
-
+import torch
+import timm
+import tqdm
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+import sys
+sys.path.append('.') # garante que ele encontra o main_just_wb
+from main_just_wb import FairFaceDataset, PATH, val_csv, transform
 from fairness_metrics import demographic_parity, equal_opportunity, calibration_by_group
 
-path = "fairface/FairFace/"
-train_csv = path + "train_labels.csv"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-df_train = pd.read_csv(train_csv)
+# carrega o conj. de validação
+val_dataset = FairFaceDataset(val_csv, PATH, transform=transform)
+val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
 
-race_mapping = {
-    'White': 'White',
-    'Middle Eastern': 'White',
-    'Latino_Hispanic': 'White',
-    'Black': 'Black',
-    'East Asian': 'Black',
-    'Southeast Asian': 'Black',
-    'Indian': 'Black'
-}
-df_train['race'] = df_train['race'].map(race_mapping)
+# carrega o modelo que treinámos
+model = timm.create_model("resnet50", pretrained=False, num_classes=2)
+model.load_state_dict(torch.load("models/model_black&white_base.pth", map_location=device))
+model.to(device)
+model.eval()
 
-discount_ages = ["0-2", "3-9", "10-19", "more than 70"]
-df_train['age'] = df_train['age'].apply(
-    lambda x: 'Discount' if x in discount_ages else 'No Discount'
-)
+# queremos recolher as predicts para calcular as métricas de fairness
+all_preds = []
+all_labels = []
+all_races = []
+all_scores = []
 
-print(df_train)
+with torch.no_grad():
+    for images, labels, races, _ in val_loader:
+        images = images.to(device)
+        outputs = model(images)
+        # funcao de ativação softmax
+        probs = F.softmax(outputs, dim=1) 
+        scores = probs[:, 1] # probabilidade da classe discount
+        _, preds = torch.max(outputs, 1) # _ pois nao queremos o valor para classificar portanto descarta-se, percorre o tensor ao longo das colunas e procura o mais alto em cada linha
 
-age_intervals = ["No Discount", "Discount"]
+        all_preds.extend(preds.cpu().numpy())
+        all_labels.extend(labels.cpu().numpy())
+        all_races.extend(races)
+        all_scores.extend(scores.cpu().numpy())
 
-sns.set_theme(style="whitegrid")
-plt.figure(figsize=(16, 6))
-sns.countplot(data=df_train, x="race", hue="gender", palette="pastel")
+A = [0 if r == "Black" else 1 for r in all_races]
 
-g = sns.catplot(
-    data=df_train,
-    x="age",           
-    hue="gender",      
-    col="race",       
-    col_wrap=2,       
-    kind="count",      
-    order=age_intervals,
-    palette="pastel",
-    height=4,          
-    aspect=1.5,        
-    sharey=False       
-)
-plt.subplots_adjust(hspace=0.8)
+spd, di = demographic_parity(all_preds, A)
+tpr_rates, fpr_rates, eod_tpr, eod_fpr = equal_opportunity(all_labels, all_preds, A)
 
-plt.show()
-
-plt.figure(figsize=(14, 8))
-heatmap_data = df_train.groupby(["race", "gender"]).size().unstack()
-sns.heatmap(data=heatmap_data, annot=True, fmt="d")
-
-plt.show()
-
-heatmap_ = df_train.groupby(["race", "age"]).size().unstack().reindex(columns=age_intervals)
-
-plt.figure(figsize=(10,8))
-sns.heatmap(
-    data=heatmap_, 
-    annot=True,          
-    fmt="d",             
-    cmap="rocket",       
-    cbar=True,
-    annot_kws={"size": 10, "weight": "bold"}
-)
-plt.show()
