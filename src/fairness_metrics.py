@@ -1,9 +1,10 @@
-
 import os
 import pandas as pd
 import numpy as np
 from scipy.spatial.distance import cosine
 from sklearn.metrics import confusion_matrix
+from sklearn.linear_model import LogisticRegression
+import matplotlib.pyplot as plt
 
 def gerar_pares_e_distancias(df_grupo, max_pares=5000):
     pares_true = []
@@ -193,3 +194,130 @@ if __name__ == "__main__":
     for b in range(len(bins)-1):
         print(f"  [{bins[b]:.1f} - {bins[b+1]:.1f}]       |        {calib_white[b]:.4f}        |        {calib_black[b]:.4f}")
     print("="*60)
+
+
+# VIES MITIGATION 
+model_white = LogisticRegression()
+model_black = LogisticRegression()
+
+Score_W_reshape = scores_w.reshape(-1, 1)
+Y_true_w_reshape = y_true_w.reshape(-1, 1)
+model_white.fit(Score_W_reshape, Y_true_w_reshape)
+
+model_w_B1 = model_white.coef_
+model_w_B0 = model_white.intercept_
+
+Score_B_reshape = scores_b.reshape(-1, 1)
+Y_true_B_reshape = y_true_b.reshape(-1, 1)
+model_black.fit(Score_B_reshape, Y_true_B_reshape)
+
+model_B_B1 = model_black.coef_
+model_B_B0 = model_black.intercept_
+
+prob_w = model_white.predict_proba(Score_W_reshape)[:, 1]
+prob_b = model_black.predict_proba(Score_B_reshape)[:, 1]
+
+pred_w = (prob_w >= 0.5).astype(int)
+pred_b = (prob_b >= 0.5).astype(int)
+
+calibrated_values_pred = np.concatenate((pred_w, pred_b))
+calibrated_values_prob = np.concatenate((prob_w, prob_b))
+
+
+spd_c, di_c = demographic_parity(calibrated_values_pred, A_comp)
+
+tpr_rates_c, fpr_rates_c, eod_tpr_c, eod_fpr_c = equal_opportunity(y_true_comp, calibrated_values_pred, A_comp)
+
+_, calib_white_c, calib_black_c = calibration_by_group(y_true_comp, calibrated_values_prob, A_comp)
+
+
+print("\n" + " " * 15 + "RESULTADOS APÓS MITIGAÇÃO (CALIBRAÇÃO DE PLATT)")
+print("="*60)
+print("1. Independência (Paridade Demográfica Corrigida):")
+print(f"  - Novo SPD: {spd_c:.4f} (Ideal: 0) | Novo DI: {di_c:.4f} (Ideal: 1.0)")
+print("-"*60)
+print("2. Separação (Igualdade de Oportunidades Corrigida):")
+print(f"  - Novo WHITE -> TPR: {tpr_rates_c[0]:.4f} | FPR: {fpr_rates_c[0]:.4f}")
+print(f"  - Novo BLACK -> TPR: {tpr_rates_c[1]:.4f} | FPR: {fpr_rates_c[1]:.4f}")
+print(f"  - Nova Diferença de TPR (EOD TPR): {eod_tpr_c:.4f} (Ideal: 0)")
+print(f"  - Nova Diferença de FPR (EOD FPR): {eod_fpr_c:.4f} (Ideal: 0)")
+print("-"*60)
+print("3. Suficiência (Nova Calibração por Grupo):")
+print("  Intervalo de Score  |  Precisão PÓS-WHITE  |  Precisão PÓS-BLACK")
+for b in range(len(bins)-1):
+    print(f"  [{bins[b]:.1f} - {bins[b+1]:.1f}]       |        {calib_white_c[b]:.4f}       |        {calib_black_c[b]:.4f}")
+print("="*60)
+
+
+def plot_calibration_comparison(bins, calib_w_antes, calib_b_antes, calib_w_depois, calib_b_depois):
+    """
+    Gera um gráfico lado a lado comparando a calibração antes e depois por grupo.
+    """
+    bin_centers = [(bins[i] + bins[i+1]) / 2 for i in range(len(bins)-1)]
+    width = 0.06  # Largura das barras
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
+    
+    # --------------------------------------------------------------------------
+    # GRÁFICO 1: ANTES DA CALIBRAÇÃO
+    # --------------------------------------------------------------------------
+    rects1_w = ax1.bar([c - width/2 for c in bin_centers], calib_w_antes, width, label='WHITE (Antes)', color='#1f77b4')
+    rects1_b = ax1.bar([c + width/2 for c in bin_centers], calib_b_antes, width, label='BLACK (Antes)', color='#ff7f0e')
+    
+    # Linha ideal (Y = X)
+    ax1.plot([0, 1], [0, 1], '--', color='gray', label='Calibração Ideal')
+    
+    ax1.set_title('Sem Calibração (Scores Brutos)', fontsize=14, fontweight='bold')
+    ax1.set_xlabel('Intervalo de Score', fontsize=12)
+    ax1.set_ylabel('Precisão Real (Proporção de Matches)', fontsize=12)
+    ax1.set_xticks(bins)
+    ax1.grid(True, linestyle=':', alpha=0.6)
+    ax1.legend(loc='upper left')
+    
+    # --------------------------------------------------------------------------
+    # GRÁFICO 2: APÓS MITIGAÇÃO (PLATT)
+    # --------------------------------------------------------------------------
+    rects2_w = ax2.bar([c - width/2 for c in bin_centers], calib_w_depois, width, label='WHITE (Pós-Platt)', color='#2ca02c')
+    rects2_b = ax2.bar([c + width/2 for c in bin_centers], calib_b_depois, width, label='BLACK (Pós-Platt)', color='#d62728')
+    
+    # Linha ideal (Y = X)
+    ax2.plot([0, 1], [0, 1], '--', color='gray', label='Calibração Ideal')
+    
+    ax2.set_title('Com Calibração (Pós-Processamento Platt)', fontsize=14, fontweight='bold')
+    ax2.set_xlabel('Intervalo de Score', fontsize=12)
+    ax2.set_xticks(bins)
+    ax2.grid(True, linestyle=':', alpha=0.6)
+    ax2.legend(loc='upper left')
+
+    # Função interna para meter as etiquetas de texto nas barras
+    def autolabel(rects, ax):
+        for rect in rects:
+            height = rect.get_height()
+            if height > 0:  # Só mete texto se a barra não for zero
+                ax.annotate(f'{height*100:.1f}%',
+                            xy=(rect.get_x() + rect.get_width() / 2, height),
+                            xytext=(0, 3),  # 3 pontos de desvio vertical
+                            textcoords="offset points",
+                            ha='center', va='bottom', fontsize=9, fontweight='bold')
+
+    # Adicionar as percentagens em cima de cada barra
+    autolabel(rects1_w, ax1)
+    autolabel(rects1_b, ax1)
+    autolabel(rects2_w, ax2)
+    autolabel(rects2_b, ax2)
+    
+    plt.tight_layout()
+    
+    # Guarda a imagem diretamente na pasta do teu script
+    plt.savefig('comparacao_calibracao_fairness.png', dpi=300)
+    print("\n[SUCESSO] Gráfico guardado como 'comparacao_calibracao_fairness.png'!")
+    plt.show()
+
+# Chamar a função para gerar e guardar o gráfico do teu trabalho
+plot_calibration_comparison(
+        bins=bins,
+        calib_w_antes=calib_white,   # Valores originais calculados no início
+        calib_b_antes=calib_black,   # Valores originais calculados no início
+        calib_w_depois=calib_white_c, # Teus novos valores pós-mitigação
+        calib_b_depois=calib_black_c  # Teus novos valores pós-mitigação
+    )
