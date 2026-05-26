@@ -19,7 +19,7 @@ def gerar_pares_e_distancias(df_grupo, max_pares=5000):
             embeddings = list(grupo['embedding'])
             for i in range(len(embeddings)):
                 for j in range(i + 1, len(embeddings)):
-                    dist = cosine(embeddings[i], embeddings[j]) # similaridade cosseno
+                    dist = cosine(embeddings[i], embeddings[j]) # distância de coseno (0 = idêntico, 1 = diferente)
                     pares_pred_dist.append(dist)
                     pares_true.append(1)
                     if len(pares_true) >= max_pares // 2:
@@ -158,8 +158,8 @@ if __name__ == "__main__":
     y_pred_w = (dists_w < threshold_glob).astype(int)
     y_pred_b = (dists_b < threshold_glob).astype(int)
     
-    # converter as distâncias para scores de semelhança entre 0 e 1
-    scores_w = np.clip(1.0 - dists_w, 0, 1)
+    # converter as distâncias para scores de semelhança entre 0 e 1 (similaridade cosseno)
+    scores_w = np.clip(1.0 - dists_w, 0, 1) 
     scores_b = np.clip(1.0 - dists_b, 0, 1)
     
     # meter no formato das funções de fairness chamadas a seguir
